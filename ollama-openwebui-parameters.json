@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-f9aa1784"
+  },
+  {
+    "ParameterKey": "SubnetIds",
+    "ParameterValue": "subnet-6f335c4e,subnet-7dbae173,subnet-71ea882e,subnet-ecf642dd,subnet-cebe8f83,subnet-92afcef4"
+  },
+  {
+    "ParameterKey": "OllamaContainerImage",
+    "ParameterValue": "ollama/ollama:latest"
+  },
+  {
+    "ParameterKey": "OpenWebUIContainerImage",
+    "ParameterValue": "ghcr.io/open-webui/open-webui:main"
+  },
+  {
+    "ParameterKey": "OllamaContainerCpu",
+    "ParameterValue": "4096"
+  },
+  {
+    "ParameterKey": "OllamaContainerMemory",
+    "ParameterValue": "8192"
+  },
+  {
+    "ParameterKey": "WebUIContainerCpu",
+    "ParameterValue": "1024"
+  },
+  {
+    "ParameterKey": "WebUIContainerMemory",
+    "ParameterValue": "2048"
+  }
+]

@@ -1,0 +1,66 @@
+{
+    "containerDefinitions": [
+        {
+            "name": "open-webui",
+            "image": "ghcr.io/open-webui/open-webui:main",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "HOST",
+                    "value": "0.0.0.0"
+                },
+                {
+                    "name": "PORT",
+                    "value": "8080"
+                },
+                {
+                    "name": "WEBUI_AUTH",
+                    "value": "false"
+                },
+                {
+                    "name": "OLLAMA_API_BASE_URL",
+                    "value": "http://ollama-alb-ollama-openwebui-334383265.us-east-1.elb.amazonaws.com:11434"
+                },
+                {
+                    "name": "OLLAMA_BASE_URL",
+                    "value": "http://ollama-alb-ollama-openwebui-334383265.us-east-1.elb.amazonaws.com:11434"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/ollama-ollama-openwebui",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "open-webui"
+                }
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:8080/ || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 60
+            }
+        }
+    ],
+    "family": "open-webui-ollama-openwebui",
+    "taskRoleArn": "arn:aws:iam::142705576015:role/ollama-openwebui-ECSTaskRole-ufMYGnjbdgjM",
+    "executionRoleArn": "arn:aws:iam::142705576015:role/ollama-openwebui-ECSTaskExecutionRole-XEvT8mj5KfZe",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "2048"
+}

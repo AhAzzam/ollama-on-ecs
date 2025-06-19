@@ -1,0 +1,11 @@
+# Runs a command remotely on a container within a task
+aws ecs execute-command \
+    --cluster ollama-cluster-ollama-openwebui \
+    --task arn:aws:ecs:us-east-1:142705576015:task/ollama-cluster-ollama-openwebui/80b25c8b14cd45e2b700ca68adb286c6 \
+    --container ollama \
+    --interactive \
+    --command "/bin/sh"
+
+# ollama api
+https://github.com/ollama/ollama/blob/main/docs/api.md
+http://ollama-alb-ollama-openwebui-334383265.us-east-1.elb.amazonaws.com:11434/api/tags

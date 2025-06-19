@@ -1,0 +1,352 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for deploying Ollama with Open WebUI on ECS Fargate'
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the ECS cluster will be deployed
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets where the ECS cluster will be deployed
+
+  OllamaContainerImage:
+    Type: String
+    Default: ollama/ollama:latest
+    Description: Ollama container image
+
+  OpenWebUIContainerImage:
+    Type: String
+    Default: ghcr.io/open-webui/open-webui:main
+    Description: Open WebUI container image
+
+  OllamaContainerCpu:
+    Type: Number
+    Default: 4096
+    Description: CPU units for the Ollama container (1024 = 1 vCPU)
+
+  OllamaContainerMemory:
+    Type: Number
+    Default: 8192
+    Description: Memory for the Ollama container (in MiB)
+
+  WebUIContainerCpu:
+    Type: Number
+    Default: 1024
+    Description: CPU units for the Open WebUI container (1024 = 1 vCPU)
+
+  WebUIContainerMemory:
+    Type: Number
+    Default: 2048
+    Description: Memory for the Open WebUI container (in MiB)
+
+Resources:
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'ollama-cluster-${AWS::StackName}'
+      CapacityProviders:
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+
+  # Security Group for ECS Tasks
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Ollama ECS tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 11434
+          ToPort: 11434
+          CidrIp: 0.0.0.0/0
+          Description: Ollama API
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+          Description: Open WebUI
+
+  # IAM Roles
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  # CloudWatch Logs Group
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/ollama-${AWS::StackName}'
+      RetentionInDays: 30
+
+  # Ollama Task Definition
+  OllamaTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'ollama-${AWS::StackName}'
+      Cpu: !Ref OllamaContainerCpu
+      Memory: !Ref OllamaContainerMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: ollama
+          Image: !Ref OllamaContainerImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 11434
+              HostPort: 11434
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ollama
+          LinuxParameters:
+            InitProcessEnabled: true
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:11434/api/version || exit 0
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+
+  # Open WebUI Task Definition
+  OpenWebUITaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'open-webui-${AWS::StackName}'
+      Cpu: !Ref WebUIContainerCpu
+      Memory: !Ref WebUIContainerMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: open-webui
+          Image: !Ref OpenWebUIContainerImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8080
+              HostPort: 8080
+              Protocol: tcp
+          Environment:
+            - Name: PORT
+              Value: '8080'
+            - Name: HOST
+              Value: '0.0.0.0'
+            - Name: OLLAMA_API_BASE_URL
+              Value: !Sub 'http://${LoadBalancer.DNSName}:11434'
+            - Name: OLLAMA_BASE_URL
+              Value: !Sub 'http://${LoadBalancer.DNSName}:11434'
+            - Name: WEBUI_AUTH
+              Value: 'false'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: open-webui
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:8080/ || exit 1
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 60
+
+  # Application Load Balancer
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'ollama-alb-${AWS::StackName}'
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref ECSSecurityGroup
+
+  # Target Groups
+  OllamaTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub 'ollama-tg-${AWS::StackName}'
+      Port: 11434
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /api/version
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+
+  WebUITargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub 'webui-tg-${AWS::StackName}'
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+
+  # Listeners
+  OllamaListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref OllamaTargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 11434
+      Protocol: HTTP
+
+  WebUIListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebUITargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 8080
+      Protocol: HTTP
+
+  # ECS Services
+  OllamaService:
+    Type: AWS::ECS::Service
+    DependsOn: OllamaListener
+    Properties:
+      ServiceName: !Sub 'ollama-service-${AWS::StackName}'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OllamaTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+          Subnets: !Ref SubnetIds
+      LoadBalancers:
+        - ContainerName: ollama
+          ContainerPort: 11434
+          TargetGroupArn: !Ref OllamaTargetGroup
+      EnableExecuteCommand: true
+
+  OpenWebUIService:
+    Type: AWS::ECS::Service
+    DependsOn: WebUIListener
+    Properties:
+      ServiceName: !Sub 'open-webui-service-${AWS::StackName}'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OpenWebUITaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+          Subnets: !Ref SubnetIds
+      LoadBalancers:
+        - ContainerName: open-webui
+          ContainerPort: 8080
+          TargetGroupArn: !Ref WebUITargetGroup
+      EnableExecuteCommand: true
+
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterName'
+
+  OllamaServiceName:
+    Description: The name of the Ollama ECS service
+    Value: !Ref OllamaService
+    Export:
+      Name: !Sub '${AWS::StackName}-OllamaServiceName'
+
+  OpenWebUIServiceName:
+    Description: The name of the Open WebUI ECS service
+    Value: !Ref OpenWebUIService
+    Export:
+      Name: !Sub '${AWS::StackName}-OpenWebUIServiceName'
+
+  LoadBalancerDNS:
+    Description: The DNS name of the load balancer
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-LoadBalancerDNS'
+
+  OllamaEndpoint:
+    Description: The endpoint for the Ollama API
+    Value: !Sub 'http://${LoadBalancer.DNSName}:11434'
+    Export:
+      Name: !Sub '${AWS::StackName}-OllamaEndpoint'
+
+  WebUIEndpoint:
+    Description: The endpoint for the Open WebUI
+    Value: !Sub 'http://${LoadBalancer.DNSName}:8080'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebUIEndpoint'

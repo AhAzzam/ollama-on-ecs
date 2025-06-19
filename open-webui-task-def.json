@@ -1,0 +1,118 @@
+{
+    "taskDefinitionArn": "arn:aws:ecs:us-east-1:142705576015:task-definition/open-webui-ollama-openwebui:1",
+    "containerDefinitions": [
+        {
+            "name": "open-webui",
+            "image": "ghcr.io/open-webui/open-webui:main",
+            "cpu": 0,
+            "links": [],
+            "portMappings": [
+                {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "entryPoint": [],
+            "command": [],
+            "environment": [
+                {
+                    "name": "HOST",
+                    "value": "0.0.0.0"
+                },
+                {
+                    "name": "PORT",
+                    "value": "8080"
+                },
+                {
+                    "name": "WEBUI_AUTH",
+                    "value": "false"
+                },
+                {
+                    "name": "OLLAMA_API_BASE_URL",
+                    "value": "http://ollama-alb-ollama-openwebui-334383265.us-east-1.elb.amazonaws.com:11434"
+                }
+            ],
+            "environmentFiles": [],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "secrets": [],
+            "dnsServers": [],
+            "dnsSearchDomains": [],
+            "extraHosts": [],
+            "dockerSecurityOptions": [],
+            "dockerLabels": {},
+            "ulimits": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/ollama-ollama-openwebui",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "open-webui"
+                },
+                "secretOptions": []
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:8080/ || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 60
+            },
+            "systemControls": [],
+            "credentialSpecs": []
+        }
+    ],
+    "family": "open-webui-ollama-openwebui",
+    "taskRoleArn": "arn:aws:iam::142705576015:role/ollama-openwebui-ECSTaskRole-ufMYGnjbdgjM",
+    "executionRoleArn": "arn:aws:iam::142705576015:role/ollama-openwebui-ECSTaskExecutionRole-XEvT8mj5KfZe",
+    "networkMode": "awsvpc",
+    "revision": 1,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.17"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.container-health-check"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.29"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EC2",
+        "FARGATE"
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "2048",
+    "registeredAt": "2025-06-18T23:40:06.202000+04:00",
+    "registeredBy": "arn:aws:sts::142705576015:assumed-role/Admin-OneClick/ahazzam-Isengard"
+}
